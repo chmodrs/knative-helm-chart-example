@@ -1,0 +1,86 @@
+# Default values for pj-cdaws-api.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: docker-unj-repo.softplan.com.br/unj/cdaws
+  tag: "4-5-1-99"
+  pullPolicy: IfNotPresent
+
+service:
+  apply: true
+  type: ClusterIP
+  port: 8080
+
+app:
+  dateHour: 000000
+  pullSecret: unjregistry
+  javaOpts: -XX:+CMSClassUnloadingEnabled -Djava.security.egd=file:///dev/urandom -Ddb2.jcc.charsetDecoderEncoder=3 -Xmx500m
+  timeZone: America/Sao_Paulo
+  databasePJDSURL: jdbc:oracle:thin:@<DATABASE>.<HASH>-east-1.rds.amazonaws.com:1521:<DATABASE>
+  databaseGCPJDSURL: jdbc:oracle:thin:@<DATABASE>.<HASH>-east-1.rds.amazonaws.com:1521:<DATABASE>
+  databaseGCPJDSTX: no-tx
+  loggingPath: /log/pj-cdaws-api
+  loggingLevelRoot: INFO
+  databaseUsername: usuario
+  databasePassword: password
+  configMapSecretName: configmapsecret
+  vaultRoleAuth: pgmbox-saas
+  vaultSecret: unj/pj-cdaws-api-CLIENTE/ENV/kv/pgmpNNNN/config
+  databaseClassName: oracle.jdbc.driver.OracleDriver
+  databaseValidationQuery: SELECT 1 FROM DUAL
+  
+
+istio:
+  enabled: false
+  virtualservices:
+    enabled: true
+    gateways:
+    - unj-istio-gateway
+    hosts:
+    - "xwing.saj6.softplan.com.br"
+    apiPath: /pj-cdaws-apiWeb
+
+ingress:
+  enabled: false
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  path: /
+  hosts:
+    - chart-example.saj6.softplan.com.br
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local  
+
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  requests:
+   cpu: 50m
+   memory: 330Mi
+  limits:
+   memory: 600Mi
+
+nodeSelector: {}
+
+tolerations:
+- key: "app"
+  operator: "Equal"
+  value: "cdaws"
+  effect: "NoSchedule"
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: role
+          operator: In
+          values:
+          - cdaws

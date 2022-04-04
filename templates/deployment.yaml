@@ -1,0 +1,97 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: {{ template "knative-helm-chart-example.fullname" . }}
+  labels:
+    app: {{ .Release.Name }}
+    chart: {{ template "knative-helm-chart-example.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        sidecar.istio.io/inject: {{ .Values.istio.enabled | quote }}
+        vault.hashicorp.com/agent-requests-mem: "10Mi"
+        vault.hashicorp.com/agent-requests-cpu: "5m"
+        vault.hashicorp.com/agent-limits-mem: "30Mi"
+        vault.hashicorp.com/agent-limits-cpu: "10m"
+        vault.hashicorp.com/agent-inject: {{ .Values.app.vaultEnabled | quote }}
+        vault.hashicorp.com/role: "{{ .Values.app.vaultRoleAuth }}"
+        vault.hashicorp.com/agent-inject-secret-.envvars.sh: "{{ .Values.app.vaultSecret }}"
+        vault.hashicorp.com/agent-inject-template-.envvars.sh: |
+          {{`{{-`}} with secret "{{ .Values.app.vaultSecret }}" {{`-}}`}}
+          DB_DEFAULTS_USERNAME={{`{{`}} .Data.data.username {{`}}`}}
+          DB_DEFAULTS_PASSWORD={{`{{`}} .Data.data.password {{`}}`}}
+          {{`{{-`}} end {{`-}}`}}
+      labels:
+        app: {{ .Release.Name }}
+        release: {{ .Release.Name }} 
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.app.pullSecret }}
+      serviceAccountName: vault-auth
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}                 
+          ports:
+            - name: http1
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP       
+          env:
+            - name: DB_GC-PJDS_DRIVER_CLASS_NAME
+              value: {{ .Values.app.databaseClassName }}
+            - name: DB_GC-PJDS_VALIDATION_QUERY
+              value: {{ .Values.app.databaseValidationQuery }}
+            - name: DB_PJDS_DRIVER_CLASS_NAME
+              value: {{ .Values.app.databaseClassName }}
+            - name: DB_PJDS_VALIDATION_QUERY
+              value: {{ .Values.app.databaseValidationQuery }}
+            - name: BASE_PATH
+              value: {{ .Values.istio.virtualservices.apiPath }}
+            - name: JAVA_OPTS
+              value: {{ .Values.app.javaOpts }}
+            - name: TZ 
+              value: {{ .Values.app.timeZone }}
+            - name: DB_PJDS_URL
+              value: {{ .Values.app.databaseURL }}
+            - name: DB_GC-PJDS_URL
+              value: {{ .Values.app.databaseURL }}
+            - name: DB_GC-PJDS_TX
+              value: {{ .Values.app.databaseGCPJDSTX }}
+            - name: logging.path
+              value: {{ .Values.app.loggingPath }}
+            - name: logging.level.root
+              value: {{ .Values.app.loggingLevelRoot }}
+            - name: DB_DEFAULTS_USERNAME
+              value: {{ .Values.app.databaseUsername }}
+            - name: DB_DEFAULTS_PASSWORD
+              value: {{ .Values.app.databasePassword }}
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: {{ .Values.app.healthcheck }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10            
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: {{ .Values.app.healthcheck }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 10
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
